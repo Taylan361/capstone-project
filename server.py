@@ -4,6 +4,7 @@ from pathlib import Path
 
 from aicodeshield.ai_remediation import configuration as ai_configuration, explain_findings
 from aicodeshield.dependency_check import check_dependencies
+from aicodeshield.intake import fetch_github_repository, inspect_website_passive
 from aicodeshield.scanner import scan_sources
 
 
@@ -23,13 +24,21 @@ def build_scan_report(project_name, files, online_lookup=False):
     return report
 
 
+def build_github_scan_report(repo_url, online_lookup=False):
+    project_name, files, intake_metadata = fetch_github_repository(repo_url)
+    report = build_scan_report(project_name, files, online_lookup=online_lookup)
+    report["intake_mode"] = "github_repository_archive"
+    report["github_intake"] = intake_metadata
+    return report
+
+
 class DashboardHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_DIST), **kwargs)
 
     def do_GET(self):
         if self.path == "/api/health":
-            self._json_response(200, {"status": "ok", "scanner_version": "0.1.0"})
+            self._json_response(200, {"status": "ok", "scanner_version": "0.2.0"})
             return
         if self.path == "/api/ai/status":
             self._json_response(200, ai_configuration())
@@ -43,7 +52,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
-        if self.path not in {"/api/scan", "/api/ai/remediate"}:
+        if self.path not in {"/api/scan", "/api/scan/github", "/api/scan/website", "/api/ai/remediate"}:
             self._json_response(404, {"error": "API route not found"})
             return
         try:
@@ -59,6 +68,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except (json.JSONDecodeError, UnicodeDecodeError):
             self._json_response(400, {"error": "Request body must be valid JSON"})
             return
+
         if self.path == "/api/ai/remediate":
             if not isinstance(payload, dict) or not isinstance(payload.get("findings"), list):
                 self._json_response(400, {"error": "Expected a findings array"})
@@ -67,12 +77,47 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 self._json_response(503, {"error": "DeepSeek is not configured. Add the API key to the local .env file and restart the app."})
                 return
             try:
-                self._json_response(200, explain_findings(payload["findings"]))
+                self._json_response(200, explain_findings(payload["findings"], payload.get("dependencies")))
             except ValueError as error:
                 self._json_response(400, {"error": str(error)})
             except RuntimeError as error:
                 self._json_response(502, {"error": str(error)})
             return
+
+        if self.path == "/api/scan/github":
+            if not isinstance(payload, dict) or not isinstance(payload.get("repo_url"), str):
+                self._json_response(400, {"error": "Expected a GitHub repository URL (repo_url)"})
+                return
+            try:
+                report = build_github_scan_report(
+                    payload["repo_url"],
+                    online_lookup=payload.get("online_lookup") is True,
+                )
+                self._json_response(200, report)
+            except ValueError as error:
+                self._json_response(400, {"error": str(error)})
+            except RuntimeError as error:
+                self._json_response(502, {"error": str(error)})
+            return
+
+        if self.path == "/api/scan/website":
+            if not isinstance(payload, dict) or not isinstance(payload.get("target_url"), str):
+                self._json_response(400, {"error": "Expected a website target_url"})
+                return
+            try:
+                allowed = payload.get("allowed_hosts") if isinstance(payload.get("allowed_hosts"), list) else None
+                report = inspect_website_passive(
+                    payload["target_url"],
+                    authorized=payload.get("authorized") is True,
+                    allowed_hosts=allowed,
+                )
+                self._json_response(200, report)
+            except ValueError as error:
+                self._json_response(400, {"error": str(error)})
+            except RuntimeError as error:
+                self._json_response(502, {"error": str(error)})
+            return
+
         if not isinstance(payload, dict) or not isinstance(payload.get("files"), list):
             self._json_response(400, {"error": "Expected a files array"})
             return
