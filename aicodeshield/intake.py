@@ -1,7 +1,9 @@
 import io
 import ipaddress
+import os
 import re
 import socket
+import subprocess
 import time
 import zipfile
 from pathlib import PurePosixPath
@@ -152,8 +154,29 @@ def extract_safe_zip_entries(archive_bytes: bytes) -> list[dict]:
     return files
 
 
+def _local_github_token() -> str | None:
+    env_tok = os.environ.get("GITHUB_TOKEN", "").strip()
+    if env_tok:
+        return env_tok
+    try:
+        proc = subprocess.run(
+            ["git", "credential", "fill"],
+            input="protocol=https\nhost=github.com\n\n",
+            text=True,
+            capture_output=True,
+            timeout=3,
+            check=False,
+        )
+        for line in proc.stdout.splitlines():
+            if line.startswith("password="):
+                return line.split("=", 1)[1].strip() or None
+    except OSError:
+        return None
+    return None
+
+
 def fetch_github_repository(repo_url: str) -> tuple[str, list[dict], dict]:
-    """Download a public GitHub repository archive safely without executing any code or scripts."""
+    """Download a GitHub repository archive safely without executing any code or scripts."""
     if not isinstance(repo_url, str):
         raise ValueError("GitHub repository URL must be a string.")
     cleaned = repo_url.strip()
@@ -174,6 +197,7 @@ def fetch_github_repository(repo_url: str) -> tuple[str, list[dict], dict]:
         headers={"User-Agent": "AICodeShield-Capstone/0.2 (Read-Only Academic Security Scanner)"},
         method="GET",
     )
+    archive_bytes = None
     try:
         with urlopen(req, timeout=NETWORK_TIMEOUT_SECONDS) as response:
             final_host = (urlsplit(response.geturl()).hostname or "").lower()
@@ -184,8 +208,33 @@ def fetch_github_repository(repo_url: str) -> tuple[str, list[dict], dict]:
         status = exc.code
         exc.close()
         if status == 404:
-            raise ValueError(f"GitHub repository '{owner}/{repo}' (ref '{ref}') was not found or is private.") from None
-        raise RuntimeError(f"GitHub archive server returned HTTP {status}.") from None
+            token = _local_github_token()
+            if token:
+                validate_safe_public_url("https://api.github.com", allowed_hosts={"api.github.com"})
+                api_ref = "" if ref == "HEAD" else f"/{ref}"
+                api_url = f"https://api.github.com/repos/{owner}/{repo}/zipball{api_ref}"
+                api_req = Request(
+                    api_url,
+                    headers={
+                        "User-Agent": "AICodeShield-Capstone/0.2",
+                        "Authorization": f"Bearer {token}",
+                        "Accept": "application/vnd.github+json",
+                    },
+                    method="GET",
+                )
+                try:
+                    with urlopen(api_req, timeout=NETWORK_TIMEOUT_SECONDS) as api_resp:
+                        final_host = (urlsplit(api_resp.geturl()).hostname or "").lower()
+                        if final_host not in {"codeload.github.com", "api.github.com", "github.com"}:
+                            raise ValueError("Unexpected redirect host during GitHub archive fetch.")
+                        archive_bytes = _read_bounded_bytes(api_resp, MAX_ARCHIVE_BYTES)
+                except HTTPError as api_exc:
+                    api_exc.close()
+                    raise ValueError(f"GitHub repository '{owner}/{repo}' (ref '{ref}') was not found or access was denied.") from None
+            else:
+                raise ValueError(f"GitHub repository '{owner}/{repo}' (ref '{ref}') was not found or is private.") from None
+        else:
+            raise RuntimeError(f"GitHub archive server returned HTTP {status}.") from None
     except (URLError, TimeoutError, OSError) as exc:
         raise RuntimeError("Could not download GitHub archive within timeout bounds.") from exc
 
