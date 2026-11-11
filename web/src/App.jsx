@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-const SOURCE_SUFFIXES = new Set(['.py', '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.json', '.txt']);
+const SOURCE_SUFFIXES = new Set(['.py', '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.html', '.htm', '.json', '.txt']);
 const SKIP_DIRECTORIES = new Set(['.git', 'node_modules', '.venv', 'venv', '__pycache__', '.mypy_cache', '.pytest_cache']);
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_LOCKFILE_BYTES = 5 * 1024 * 1024;

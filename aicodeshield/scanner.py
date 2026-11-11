@@ -9,7 +9,7 @@ MAX_FILE_BYTES = 1_048_576
 MAX_LOCKFILE_BYTES = 5_242_880
 LOCKFILE_NAMES = {"package-lock.json", "npm-shrinkwrap.json"}
 SKIP_DIRECTORIES = {".git", "node_modules", ".venv", "venv", "__pycache__", ".mypy_cache", ".pytest_cache"}
-SOURCE_SUFFIXES = {".py", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}
+SOURCE_SUFFIXES = {".py", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".html", ".htm"}
 
 LIFECYCLE_HOOKS = {"preinstall", "install", "postinstall", "preuninstall", "postuninstall", "prepare", "prepublish"}
 SUSPICIOUS_SCRIPT_PATTERN = re.compile(
@@ -21,7 +21,7 @@ STANDALONE_TOKEN_PATTERN = re.compile(
     r"\b(sk-[A-Za-z0-9_-]{10,}|gh[pousr]_[A-Za-z0-9_]{12,}|AKIA[0-9A-Z]{16})\b"
 )
 SECRET_ASSIGNMENT_PATTERN = re.compile(
-    r"\b(api[_-]?key|secret|password|passwd|token|client[_-]?secret|private[_-]?key|access[_-]?key)\b\s*[:=]\s*(['\"])([^'\"\n]{6,})\2",
+    r"\b([A-Za-z0-9_]*(?:api[_-]?key|secret|password|passwd|token|private[_-]?key|access[_-]?key)[A-Za-z0-9_]*)\b\s*[:=]\s*(['\"])([^'\"\n]{6,})\2",
     re.IGNORECASE,
 )
 
@@ -101,7 +101,7 @@ RULES = [
         "severity": "high",
         "confidence": "high",
         "remediation": "Avoid evaluating dynamically supplied text; use JSON.parse and explicit schema validation.",
-        "extensions": {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"},
+        "extensions": {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".html", ".htm"},
     },
     {
         "id": "JS003",
@@ -111,7 +111,7 @@ RULES = [
         "severity": "high",
         "confidence": "medium",
         "remediation": "Assign untrusted text via textContent / innerText or sanitize HTML with DOMPurify before rendering.",
-        "extensions": {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"},
+        "extensions": {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".html", ".htm"},
     },
     {
         "id": "JS004",
